@@ -9,12 +9,15 @@ You can also include images in this folder and reference them in the markdown. E
 
 ## How it works
 
-Explain how your project works
+This project uses SPI to control PWM outputs. You send it some data with SPI and it
+changes some registers. The registers control which outputs turn on and if they do
+PWM or not. There is also a register for the duty cycle, which changes how long the
+signal is on.
 
 ## How to test
 
-Explain how to use your project
+Send it data with SPI and check if the outputs change.
 
 ## External hardware
 
-List external hardware used in your project (e.g. PMOD, LED display, etc), if any
+None
