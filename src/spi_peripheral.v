@@ -13,5 +13,23 @@ module spi_peripheral (
     output reg [7:0] en_reg_pwm_15_8, // 0x03: PWM enable for uio_out[7:0]
     output reg [7:0] pwm_duty_cycle    // 0x04: PWM duty cycle
 );
+    reg [2:0] sclk_sync;   // 3 flip-flops
+    reg [2:0] ncs_sync;    // 3 flip-flops
+    reg [1:0] copi_sync;   // 2 flip-flop
 
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            sclk_sync <= 3'b000;
+            ncs_sync <= 3'b111; // inactive high
+            copi_sync <= 2'b00;
+        end else begin
+            sclk_sync <= {sclk_sync[1:0], sclk};
+            ncs_sync <= {ncs_sync[1:0], ncs};
+            copi_sync <= {copi_sync[0], copi};
+        end
+    end
+
+    wire sclk_rise = sclk_sync[1] && ~sclk_sync[2];   // 1 for one tick when SCLK goes 0 -> 1
+    wire ncs_rise  = ncs_sync[1] && ~ncs_sync[2];   // 1 for one tick when nCS goes 0 -> 1 (message ended)
+    
 endmodule
