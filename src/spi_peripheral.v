@@ -31,5 +31,26 @@ module spi_peripheral (
 
     wire sclk_rise = sclk_sync[1] && ~sclk_sync[2];   // 1 for one tick when SCLK goes 0 -> 1
     wire ncs_rise  = ncs_sync[1] && ~ncs_sync[2];   // 1 for one tick when nCS goes 0 -> 1 (message ended)
-    
+
+    reg [15:0] shift_reg;   // holds the 16 bits as they arrive
+    reg [4:0] bit_count;   // how many bits have arrived so far
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            // reset: everything starts at 0
+            shift_reg       <= 0;
+            bit_count       <= 0;
+            en_reg_out_7_0  <= 0;
+            en_reg_out_15_8 <= 0;
+            en_reg_pwm_7_0  <= 0;
+            en_reg_pwm_15_8 <= 0;
+            pwm_duty_cycle  <= 0;
+
+        end else if (ncs_sync[1] == 1'b0) begin          // nCS is low = message in progress
+            if (sclk_rise) begin               // SCLK just went up
+                shift_reg <= { shift_reg[14:0], copi_sync[1] };
+                bit_count <= bit_count + 1;
+            end
+        end
+    end
 endmodule
