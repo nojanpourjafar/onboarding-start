@@ -34,6 +34,7 @@ module spi_peripheral (
 
     reg [15:0] shift_reg;   // holds the 16 bits as they arrive
     reg [4:0] bit_count;   // how many bits have arrived so far
+    localparam max_address = 7'h04;   // highest valid register address
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -47,10 +48,23 @@ module spi_peripheral (
             pwm_duty_cycle  <= 0;
 
         end else if (ncs_sync[1] == 1'b0) begin          // nCS is low = message in progress
-            if (sclk_rise) begin               // SCLK just went up
+            if (sclk_rise) begin                          // SCLK just went up
                 shift_reg <= { shift_reg[14:0], copi_sync[1] };
                 bit_count <= bit_count + 1;
             end
+        end else if (ncs_rise) begin                  // nCS just went high = message ended
+            if (bit_count == 16 && shift_reg[15] == 1'b1 && shift_reg[14:8] <= max_address) begin
+                case (shift_reg[14:8])                         // find which register
+                    7'h00: en_reg_out_7_0  <= shift_reg[7:0];
+                    7'h01: en_reg_out_15_8 <= shift_reg[7:0];
+                    7'h02: en_reg_pwm_7_0  <= shift_reg[7:0];
+
+                    7'h03: en_reg_pwm_15_8 <= shift_reg[7:0];
+                    7'h04: pwm_duty_cycle  <= shift_reg[7:0];
+                    default: ;                            // anything else: do nothing
+                endcase
+            end
+            bit_count <= 0;                               // ready for the next message to eb sent
         end
     end
 endmodule
