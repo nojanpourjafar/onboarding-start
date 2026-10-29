@@ -151,11 +151,105 @@ async def test_spi(dut):
 
 @cocotb.test()
 async def test_pwm_freq(dut):
-    # Write your test here
+    clock = Clock(dut.clk, 100, units="ns")
+    cocotb.start_soon(clock.start())
+    
+    # Reset
+    dut._log.info("Reset")
+    dut.ena.value = 1
+    ncs = 1
+    bit = 0
+    sclk = 0
+    dut.ui_in.value = ui_in_logicarray(ncs, bit, sclk)
+    dut.rst_n.value = 0
+    await ClockCycles(dut.clk, 5)
+    dut.rst_n.value = 1
+    await ClockCycles(dut.clk, 5)
+
+    await send_spi_transaction(dut, 1, 0x00, 0x01)  # turn on pin 0
+    await send_spi_transaction(dut, 1, 0x02, 0x01)  # make pin 0 do PWM
+    await send_spi_transaction(dut, 1, 0x04, 0x80)  # duty = 128/256 = 50% test
+
+    # find two rising edges (0 -> 1) on pin 0
+    last = int(dut.uo_out.value) & 1
+    t1 = 0
+    t2 = 0
+    for i in range(100000):
+        await ClockCycles(dut.clk, 1)
+        now = int(dut.uo_out.value) & 1
+        if last == 0 and now == 1:
+            if t1 == 0:
+                t1 = cocotb.utils.get_sim_time(units="ns")
+            else:
+                t2 = cocotb.utils.get_sim_time(units="ns")
+                break
+        last = now
+
+    assert t2 != 0, "timed out, never saw two rising edges"
+
+    period = t2 - t1
+    freq = 1e9 / period
+    dut._log.info(f"Frequency: {freq} Hz")
+    assert 2970 <= freq <= 3030, f"Frequency is {freq} Hz, should be 2970-3030"
+
     dut._log.info("PWM Frequency test completed successfully")
 
 
 @cocotb.test()
 async def test_pwm_duty(dut):
-    # Write your test here
+    clock = Clock(dut.clk, 100, units="ns")
+    cocotb.start_soon(clock.start())
+
+    # Reset
+    dut._log.info("Reset")
+    dut.ena.value = 1
+    ncs = 1
+    bit = 0
+    sclk = 0
+    dut.ui_in.value = ui_in_logicarray(ncs, bit, sclk)
+    dut.rst_n.value = 0
+    await ClockCycles(dut.clk, 5)
+    dut.rst_n.value = 1
+    await ClockCycles(dut.clk, 5)
+
+    await send_spi_transaction(dut, 1, 0x00, 0x01)  # turn on pin 0
+    await send_spi_transaction(dut, 1, 0x02, 0x01)  # make pin 0 do PWM
+
+    # 0% duty: pin 0 should stay low the whole time
+    await send_spi_transaction(dut, 1, 0x04, 0x00)
+    for i in range(4000):
+        await ClockCycles(dut.clk, 1)
+        pin = int(dut.uo_out.value) & 1
+        assert pin == 0, "0% duty: pin 0 went high"
+
+    # 100% duty: pin 0 should stay high the whole time
+    await send_spi_transaction(dut, 1, 0x04, 0xFF)
+    for i in range(4000):
+        await ClockCycles(dut.clk, 1)
+        pin = int(dut.uo_out.value) & 1
+        assert pin == 1, "100% duty: pin 0 went low"
+
+    # 50% duty: time rising edge -> falling edge -> next rising edge
+    await send_spi_transaction(dut, 1, 0x04, 0x80)
+    last = int(dut.uo_out.value) & 1
+    rise1 = 0
+    fall = 0
+    rise2 = 0
+    for i in range(100000):
+        await ClockCycles(dut.clk, 1)
+        now = int(dut.uo_out.value) & 1
+        if last == 0 and now == 1:
+            if rise1 == 0:
+                rise1 = cocotb.utils.get_sim_time(units="ns")
+            elif fall != 0:
+                rise2 = cocotb.utils.get_sim_time(units="ns")
+                break
+        if last == 1 and now == 0 and rise1 != 0:
+            fall = cocotb.utils.get_sim_time(units="ns")
+        last = now
+    assert rise2 != 0, "timed out"
+    duty = (fall - rise1) / (rise2 - rise1) * 100
+    dut._log.info(f"Duty: {duty}%")
+    assert 49 <= duty <= 51, f"duty is {duty}%, should be 49-51"
+
     dut._log.info("PWM Duty Cycle test completed successfully")
